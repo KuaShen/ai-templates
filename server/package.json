@@ -6,14 +6,20 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/db/seed.js",
+    "crawl": "node src/crawler/run.js",
+    "crawl:prompthero": "node src/crawler/run.js --source prompthero",
+    "crawl:lexica": "node src/crawler/run.js --source lexica",
+    "crawl:all": "node src/crawler/run.js --source all"
   },
   "dependencies": {
-    "better-sqlite3": "^11.1.2",
+    "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
+    "better-sqlite3": "^11.1.2",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "dotenv": "^16.4.5"
+    "jsonwebtoken": "^9.0.2"
   }
 }

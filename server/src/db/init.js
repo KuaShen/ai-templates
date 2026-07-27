@@ -42,6 +42,7 @@ export function initDatabase() {
       downloads INTEGER DEFAULT 0,
       likes INTEGER DEFAULT 0,
       sort_order INTEGER DEFAULT 0,
+      source TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );

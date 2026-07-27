@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, FileText, Users, Plus, Edit2, Trash2, X } from 'lucide-react';
+import {
+  LayoutDashboard, FileText, Users, Plus, Edit2, Trash2, X,
+  Bot, Play, RefreshCw, CheckCircle2, XCircle, Clock, Database, AlertCircle
+} from 'lucide-react';
 import api from '../api/axios';
 
 export default function Admin() {
@@ -15,6 +18,18 @@ export default function Admin() {
   });
   const [loading, setLoading] = useState(false);
 
+  // 爬虫状态
+  const [crawlerStatus, setCrawlerStatus] = useState(null);
+  const [crawlerSources, setCrawlerSources] = useState([]);
+  const [crawlerRunning, setCrawlerRunning] = useState(false);
+  const [crawlerOptions, setCrawlerOptions] = useState({
+    source: 'all',
+    pages: 2,
+    items: 6,
+    category: '',
+  });
+  const [crawlerPolling, setCrawlerPolling] = useState(null);
+
   useEffect(() => {
     if (tab === 'dashboard') {
       api.get('/admin/stats').then(r => setStats(r.data.stats)).catch(() => {});
@@ -22,8 +37,76 @@ export default function Admin() {
       api.get('/admin/templates').then(r => setTemplates(r.data.templates)).catch(() => {});
     } else if (tab === 'users') {
       api.get('/admin/users').then(r => setUsers(r.data.users)).catch(() => {});
+    } else if (tab === 'crawler') {
+      loadCrawlerStatus();
+      loadCrawlerSources();
     }
   }, [tab]);
+
+  // 停止轮询
+  useEffect(() => {
+    return () => {
+      if (crawlerPolling) clearInterval(crawlerPolling);
+    };
+  }, [crawlerPolling]);
+
+  const loadCrawlerStatus = async () => {
+    try {
+      const r = await api.get('/admin/crawler/status');
+      setCrawlerStatus(r.data);
+      if (r.data.running) {
+        setCrawlerRunning(true);
+        startPolling();
+      } else {
+        setCrawlerRunning(false);
+        if (crawlerPolling) {
+          clearInterval(crawlerPolling);
+          setCrawlerPolling(null);
+        }
+      }
+    } catch {}
+  };
+
+  const loadCrawlerSources = async () => {
+    try {
+      const r = await api.get('/admin/crawler/sources');
+      setCrawlerSources(r.data.sources);
+    } catch {}
+  };
+
+  const startPolling = () => {
+    if (crawlerPolling) clearInterval(crawlerPolling);
+    const id = setInterval(async () => {
+      try {
+        const r = await api.get('/admin/crawler/status');
+        setCrawlerStatus(r.data);
+        if (!r.data.running) {
+          setCrawlerRunning(false);
+          clearInterval(id);
+          setCrawlerPolling(null);
+        }
+      } catch {}
+    }, 3000);
+    setCrawlerPolling(id);
+  };
+
+  const handleStartCrawler = async () => {
+    setCrawlerRunning(true);
+    try {
+      const body = {
+        source: crawlerOptions.source,
+        pages: parseInt(crawlerOptions.pages) || 2,
+        items: parseInt(crawlerOptions.items) || 6,
+      };
+      if (crawlerOptions.category) body.category = crawlerOptions.category;
+
+      await api.post('/admin/crawler/run', body);
+      startPolling();
+    } catch (err) {
+      alert(err.response?.data?.error || '启动爬虫失败');
+      setCrawlerRunning(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,6 +150,7 @@ export default function Admin() {
   const tabs = [
     { id: 'dashboard', label: '数据概览', icon: LayoutDashboard },
     { id: 'templates', label: '模板管理', icon: FileText },
+    { id: 'crawler', label: '爬虫管理', icon: Bot },
     { id: 'users', label: '用户管理', icon: Users },
   ];
 
@@ -76,7 +160,7 @@ export default function Admin() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">管理后台</h1>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6">
+        <div className="flex gap-1 mb-6 flex-wrap">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -151,6 +235,195 @@ export default function Admin() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Crawler Management */}
+        {tab === 'crawler' && (
+          <div className="space-y-6">
+            {/* 数据库概览 */}
+            {crawlerStatus && (
+              <div className="card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Database className="w-5 h-5 text-primary-600" />
+                  <h3 className="font-semibold text-gray-900">数据库概况</h3>
+                </div>
+                <div className="flex items-center gap-8">
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">{crawlerStatus.database?.totalTemplates || 0}</div>
+                    <div className="text-sm text-gray-500">模板总数</div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap gap-2">
+                      {crawlerStatus.database?.categoryStats?.map(c => (
+                        <span key={c.category} className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 rounded-full text-xs text-gray-600">
+                          {c.category}: {c.count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 爬虫控制面板 */}
+            <div className="card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Bot className="w-5 h-5 text-primary-600" />
+                <h3 className="font-semibold text-gray-900">爬虫控制</h3>
+              </div>
+
+              {/* 运行状态 */}
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-gray-50">
+                {crawlerRunning ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 text-primary-600 animate-spin" />
+                    <span className="text-sm text-primary-700 font-medium">爬虫正在运行中...</span>
+                  </>
+                ) : crawlerStatus?.lastRun ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <span className="text-sm text-gray-600">
+                      上次运行: {new Date(crawlerStatus.lastRun).toLocaleString('zh-CN')}
+                      {crawlerStatus.lastResult && ` — 插入 ${crawlerStatus.lastResult.inserted} 条，跳过 ${crawlerStatus.lastResult.skipped} 条`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-5 h-5 text-gray-400" />
+                    <span className="text-sm text-gray-500">尚未运行过爬虫</span>
+                  </>
+                )}
+              </div>
+
+              {/* 错误显示 */}
+              {crawlerStatus?.error && (
+                <div className="flex items-center gap-2 mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {crawlerStatus.error}
+                </div>
+              )}
+
+              {/* 配置表单 */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">数据源</label>
+                  <select
+                    value={crawlerOptions.source}
+                    onChange={e => setCrawlerOptions({...crawlerOptions, source: e.target.value})}
+                    className="input text-sm"
+                    disabled={crawlerRunning}
+                  >
+                    <option value="all">全部数据源</option>
+                    {crawlerSources.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">每分类页数</label>
+                  <input
+                    type="number"
+                    value={crawlerOptions.pages}
+                    onChange={e => setCrawlerOptions({...crawlerOptions, pages: e.target.value})}
+                    className="input text-sm"
+                    min={1} max={10}
+                    disabled={crawlerRunning}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">每词条数</label>
+                  <input
+                    type="number"
+                    value={crawlerOptions.items}
+                    onChange={e => setCrawlerOptions({...crawlerOptions, items: e.target.value})}
+                    className="input text-sm"
+                    min={1} max={20}
+                    disabled={crawlerRunning}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">指定分类</label>
+                  <select
+                    value={crawlerOptions.category}
+                    onChange={e => setCrawlerOptions({...crawlerOptions, category: e.target.value})}
+                    className="input text-sm"
+                    disabled={crawlerRunning}
+                  >
+                    <option value="">全部分类</option>
+                    <option value="ecommerce">电商广告</option>
+                    <option value="social">社交媒体</option>
+                    <option value="branding">品牌形象</option>
+                    <option value="campaign">活动推广</option>
+                    <option value="marketing">营销素材</option>
+                    <option value="shortvideo">短视频素材</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={handleStartCrawler}
+                disabled={crawlerRunning}
+                className="btn-primary"
+              >
+                {crawlerRunning ? (
+                  <><RefreshCw className="w-4 h-4 animate-spin" /> 运行中...</>
+                ) : (
+                  <><Play className="w-4 h-4" /> 启动爬虫</>
+                )}
+              </button>
+            </div>
+
+            {/* 上次运行结果 */}
+            {crawlerStatus?.lastResult && !crawlerRunning && (
+              <div className="card p-5">
+                <h3 className="font-semibold text-gray-900 mb-4">上次运行结果</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="p-3 rounded-lg bg-green-50">
+                    <div className="text-xl font-bold text-green-700">{crawlerStatus.lastResult.inserted || 0}</div>
+                    <div className="text-xs text-green-600">成功插入</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-yellow-50">
+                    <div className="text-xl font-bold text-yellow-700">{crawlerStatus.lastResult.skipped || 0}</div>
+                    <div className="text-xs text-yellow-600">跳过(重复)</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-red-50">
+                    <div className="text-xl font-bold text-red-700">{crawlerStatus.lastResult.failed || 0}</div>
+                    <div className="text-xs text-red-600">失败</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-blue-50">
+                    <div className="text-xl font-bold text-blue-700">{crawlerStatus.lastResult.elapsed || '--'}</div>
+                    <div className="text-xs text-blue-600">耗时(秒)</div>
+                  </div>
+                </div>
+
+                {crawlerStatus.lastResult.bySource && (
+                  <div className="mb-3">
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">按来源:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {crawlerStatus.lastResult.bySource.map(s => (
+                        <span key={s.source} className="inline-flex items-center gap-1 px-3 py-1 bg-gray-50 rounded-full text-sm text-gray-600">
+                          {s.source}: {s.count} 条
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {crawlerStatus.lastResult.byCategory && crawlerStatus.lastResult.byCategory.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">按分类:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {crawlerStatus.lastResult.byCategory.map(c => (
+                        <span key={c.category} className="inline-flex items-center gap-1 px-3 py-1 bg-gray-50 rounded-full text-sm text-gray-600">
+                          {c.category}: {c.count} 条
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

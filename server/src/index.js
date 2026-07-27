@@ -7,7 +7,9 @@ import { initDatabase } from './db/init.js';
 import authRoutes from './routes/auth.js';
 import templateRoutes from './routes/templates.js';
 import creditRoutes from './routes/credits.js';
+import userRoutes from './routes/user.js';
 import adminRoutes from './routes/admin.js';
+import crawlerRoutes from './routes/crawler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -31,6 +33,7 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/crawler', crawlerRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
@@ -47,4 +50,3 @@ app.listen(PORT, () => {
   console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
   console.log(`📦 API 地址: http://localhost:${PORT}/api`);
 });
-import userRoutes from './routes/user.js';
